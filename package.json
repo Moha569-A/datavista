@@ -1,0 +1,34 @@
+{
+  "name": "datavista-analytics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DataVista Analytics \u2014 turn CSV/XLSX datasets into validated, shareable visual reports.",
+  "type": "module",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces --include-workspace-root",
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm --workspace @datavista/api run dev",
+    "dev:web": "npm --workspace @datavista/web run dev",
+    "dev:analytics": "cd services/analytics && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8788 --reload",
+    "build": "npm --workspace @datavista/web run build",
+    "start:api": "npm --workspace @datavista/api run start",
+    "migrate": "npm --workspace @datavista/api run migrate",
+    "seed": "npm --workspace @datavista/api run seed",
+    "test": "npm run test:web && npm run test:api && npm run test:analytics",
+    "test:api": "npm --workspace @datavista/api run test",
+    "test:web": "npm --workspace @datavista/web exec vitest run",
+    "test:analytics": "cd services/analytics && python3 -m pytest",
+    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-} npx playwright test",
+    "lint": "echo 'Linting is handled by the build + test suites in this MVP.'"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}

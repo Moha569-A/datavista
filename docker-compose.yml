@@ -1,0 +1,64 @@
+# Production-shaped local stack: PostgreSQL + analytics + API + static SPA.
+# `docker compose up --build` then open http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: datavista
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-datavista}
+      POSTGRES_DB: datavista
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datavista -d datavista"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    environment:
+      ANALYTICS_SERVICE_TOKEN: ${ANALYTICS_SERVICE_TOKEN:-change-me-in-production}
+    expose: ["8788"]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      DB_DRIVER: pg
+      DATABASE_URL: postgresql://datavista:${POSTGRES_PASSWORD:-datavista}@db:5432/datavista
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in production}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8080}
+      ANALYTICS_URL: http://analytics:8788
+      ANALYTICS_SERVICE_TOKEN: ${ANALYTICS_SERVICE_TOKEN:-change-me-in-production}
+      AUTO_SEED: ${AUTO_SEED:-true}
+      STORAGE_DIR: /app/.data/storage
+    volumes:
+      - api_storage:/app/.data/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      analytics:
+        condition: service_started
+    expose: ["8787"]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  api_storage:

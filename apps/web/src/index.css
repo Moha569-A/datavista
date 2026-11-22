@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-white;
+  }
+  h1, h2, h3, h4 {
+    @apply text-ink font-semibold tracking-tight;
+  }
+  ::selection {
+    @apply bg-accent/15;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-edge bg-white shadow-card;
+  }
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap;
+  }
+  .btn-md { @apply h-9 px-3.5; }
+  .btn-sm { @apply h-8 px-3 text-[13px]; }
+  .btn-lg { @apply h-11 px-5; }
+  .btn-primary { @apply btn bg-accent text-white hover:bg-accent-hover; }
+  .btn-secondary { @apply btn border border-edge bg-white text-ink hover:bg-navy-50; }
+  .btn-ghost { @apply btn text-ink-muted hover:bg-navy-50 hover:text-ink; }
+  .btn-danger { @apply btn bg-danger text-white hover:bg-red-800; }
+  .input {
+    @apply w-full rounded-lg border border-edge bg-white px-3 py-2 text-sm text-ink
+           placeholder:text-ink-faint focus:border-accent focus:ring-2 focus:ring-accent/20
+           disabled:bg-navy-50 disabled:text-ink-faint;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
+  }
+  .hint {
+    @apply mt-1 text-xs text-ink-muted;
+  }
+  .field-error {
+    @apply mt-1 text-xs font-medium text-danger;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
+  }
+  .link {
+    @apply text-accent underline-offset-2 hover:underline;
+  }
+  .th {
+    @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint;
+  }
+  .td {
+    @apply px-4 py-3 text-sm text-ink align-middle;
+  }
+  .table-row {
+    @apply border-b border-edge/70 last:border-0 hover:bg-navy-50/60;
+  }
+  .skel {
+    @apply relative overflow-hidden rounded bg-navy-100/70;
+  }
+  .skel::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/60 to-transparent animate-shimmer;
+  }
+  .scroll-x {
+    @apply overflow-x-auto;
+  }
+}
