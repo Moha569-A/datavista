@@ -41,8 +41,29 @@ The API suite drives the real Express app through Supertest with a cookie jar, s
 - Responsive behaviour at 375 px, 768 px and 1440 px.
 - Live updates: socket connected, import events received, dashboard refresh on dataset completion.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on every pull request:
+
+| Job | What it runs |
+| --- | --- |
+| API — tests | `npm ci`, `pip install`, then the analytics service and `npx vitest run` **in the same step** |
+| Analytics — pytest | `python -m pytest` in `services/analytics` |
+| Web — build + unit tests | `npx vitest run` and `npm run build` |
+| Detect image-relevant changes | Diffs paths since the previous commit, sets an `images` output |
+| Docker images build | All three images, skipped unless image inputs changed |
+
+End-to-end tests are **not** in CI: they need API, analytics and web running together plus a seeded database, which is a heavier job than the unit suites justify at this stage. Run them locally with `npm run test:e2e`.
+
+## Two CI-only failures worth recording
+
+Neither was reproducible locally, which is the point of running CI at all.
+
+1. **Backgrounded service reaped between steps.** The API job started `uvicorn … &` in one step and probed `/health` in the next. The runner tears down a step's process tree when the step exits, so the server was gone by the probe: the job failed after burning a full 60 s timeout, with the actual suite never running. Starting, probing and testing inside one step keeps the service in the same process tree; an `EXIT` trap reaps it even when the suite fails, so a failing test never hangs the job.
+2. **Change detection matched commit messages.** The Docker gate tested for the substring `Dockerfile` (and friends) inside `github.event.commits`, which serialises commit *messages* as well as file paths — so a doc commit whose message mentioned Dockerfile rebuilt three images. Replaced by a `changes` job that diffs real paths. Verified both ways locally: a workflow-only commit yields `images=false`, a `Dockerfile.api` change yields `images=true`.
+
 ## Gaps and next steps
 
-- Playwright end-to-end journeys are scaffolded (`npm run test:e2e`) but require the full stack running; the equivalent flows were verified manually.
+- The browser journeys (`tests/e2e/analyst-journey.spec.js`, 3 tests) run locally against a live stack; they are not wired into CI.
 - Load testing of large-file imports and high-cardinality chart queries is not automated.
 - No visual-regression snapshots yet.

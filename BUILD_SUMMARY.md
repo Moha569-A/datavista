@@ -58,6 +58,14 @@ Each was caught by tests or by driving the running app, not by inspection:
 
 Plus two correctness improvements: forecasting now requires a candidate to beat the naive baseline by >2% before displacing it, and monthly series are detected from median gaps rather than a fragile frequency guess.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR: four jobs covering the API suite (with the Python analytics service started alongside it), `pytest`, the web unit tests plus a production build, and Docker image builds.
+
+First real execution, [run 45129764261](https://github.com/Moha569-A/datavista/actions/runs/45129764261): **all four jobs green**. Image builds are now gated on whether image inputs actually changed (a `changes` job diffs paths since the previous commit) instead of rebuilding three images for a docs commit.
+
+Two failures that only appeared in CI are recorded in `docs/TESTING.md` — a backgrounded service being reaped between steps, and a change-detection gate that matched commit messages rather than files. Both are fixed; the local suites never exercised either.
+
 ## Honest gaps (documented in `docs/SECURITY.md` and `docs/TESTING.md`)
 
 - Password reset queues an audited request; outbound email is post-MVP, so an administrator must act on it.
