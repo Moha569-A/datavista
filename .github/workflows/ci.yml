@@ -5,40 +5,86 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel superseded runs on the same ref — a push while CI is running
+# otherwise queues a second full matrix.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   api:
     name: API — tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - run: npm ci
-        working-directory: apps/api
-      # The API's analytics-dependent assertions need the Python service.
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # The API's analytics-dependent assertions need the Python service.
       - run: pip install -r services/analytics/requirements.txt
-      - run: uvicorn app.main:app --host 127.0.0.1 --port 8788 &
-        working-directory: services/analytics
-      - run: npx wait-on http://127.0.0.1:8788/health --timeout 60000
-      - run: npm test
+
+      - run: npm ci
         working-directory: apps/api
+
+      # The analytics service is started, probed, the suite is run and the
+      # service is stopped inside a single step on purpose.
+      #
+      # A step ending in `&` does not keep its child process: the runner tears
+      # down the step's process tree as soon as the step exits, so the server
+      # started in step N is gone by step N+1 and any probe there gets
+      # ECONNREFUSED. Keeping start + wait + test in one step keeps the server
+      # in the same process tree as the probe. The trap guarantees the server is
+      # reaped even when the suite fails, so the job never hangs.
+      - name: Analytics service + API test suite
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          cd ../../services/analytics
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8788 &
+          ANALYTICS_PID=$!
+          trap 'kill "$ANALYTICS_PID" 2>/dev/null || true' EXIT
+          cd ../../apps/api
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8788/health >/dev/null; then
+              echo "analytics service ready after ${attempt}s"
+              break
+            fi
+            if ! kill -0 "$ANALYTICS_PID" 2>/dev/null; then
+              echo "::error::analytics service exited before becoming ready"
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8788/health
+
+          npx vitest run
 
   analytics:
     name: Analytics — pytest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: services/analytics/requirements.txt
+
       - run: pip install -r services/analytics/requirements.txt
+
       - run: python -m pytest
         working-directory: services/analytics
 
@@ -47,15 +93,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
+
       - run: npm ci
         working-directory: apps/web
+
       - run: npx vitest run
         working-directory: apps/web
+
       - run: npm run build
         working-directory: apps/web
 
@@ -63,8 +113,19 @@ jobs:
     name: Docker images build
     runs-on: ubuntu-latest
     needs: [api, analytics, web]
+    # Image builds are the slowest job and the least informative on a doc
+    # change; only build them when the image inputs actually change.
+    if: >-
+      github.event_name == 'push' &&
+      (github.event.forced ||
+       contains(toJSON(github.event.commits), 'Dockerfile') ||
+       contains(toJSON(github.event.commits), 'docker-compose') ||
+       contains(toJSON(github.event.commits), 'infra/') ||
+       contains(toJSON(github.event.commits), 'package-lock.json') ||
+       contains(toJSON(github.event.commits), 'requirements.txt'))
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f Dockerfile.api .
-      - run: docker build -f Dockerfile.analytics .
-      - run: docker build -f Dockerfile.web .
+
+      - run: docker build -f Dockerfile.api -t datavista-api:ci .
+      - run: docker build -f Dockerfile.analytics -t datavista-analytics:ci .
+      - run: docker build -f Dockerfile.web -t datavista-web:ci .
