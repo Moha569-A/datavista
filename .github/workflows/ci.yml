@@ -109,20 +109,47 @@ jobs:
       - run: npm run build
         working-directory: apps/web
 
+  # Image builds are the slowest job and the least informative on a docs-only
+  # change, so they are gated on whether any image input actually changed.
+  # This must diff real file paths: matching against github.event.commits
+  # also matches *commit messages*, so a message containing the word
+  # "Dockerfile" would trigger three image builds for a one-line doc tweak.
+  changes:
+    name: Detect image-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.diff.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: diff
+        name: Diff changed paths
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "base ${base} unavailable (new branch or force-push); assuming image inputs changed"
+            echo "images=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$base" HEAD | tee /tmp/changed.txt | sed 's/^/  changed: /'
+          if grep -Eq '^(Dockerfile|docker-compose\.ya?ml|\.dockerignore|infra/|package-lock\.json|apps/[^/]+/package(-lock)?\.json|services/analytics/requirements\.txt)' /tmp/changed.txt; then
+            echo "images=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "images=false" >> "$GITHUB_OUTPUT"
+          fi
+
   docker:
     name: Docker images build
     runs-on: ubuntu-latest
-    needs: [api, analytics, web]
-    # Image builds are the slowest job and the least informative on a doc
-    # change; only build them when the image inputs actually change.
-    if: >-
-      github.event_name == 'push' &&
-      (github.event.forced ||
-       contains(toJSON(github.event.commits), 'Dockerfile') ||
-       contains(toJSON(github.event.commits), 'docker-compose') ||
-       contains(toJSON(github.event.commits), 'infra/') ||
-       contains(toJSON(github.event.commits), 'package-lock.json') ||
-       contains(toJSON(github.event.commits), 'requirements.txt'))
+    needs: [changes, api, analytics, web]
+    if: needs.changes.outputs.images == 'true'
     steps:
       - uses: actions/checkout@v4
 
